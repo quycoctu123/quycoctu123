@@ -1,0 +1,17 @@
+{
+  "name": "wcm-factory-platform",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @wcm/web dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "db:migrate": "pnpm --filter @wcm/db migrate",
+    "db:seed": "pnpm --filter @wcm/db seed"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  },
+  "packageManager": "pnpm@9.1.0"
+}

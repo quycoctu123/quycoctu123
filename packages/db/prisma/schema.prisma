@@ -1,0 +1,536 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== HRM ====================
+
+model Employee {
+  id             String   @id @default(uuid())
+  employeeNumber String   @unique
+  firstName      String
+  lastName       String
+  email          String   @unique
+  role           String   // SUPER_ADMIN | PLANT_MANAGER | MODULE_MANAGER | SUPERVISOR | OPERATOR | VIEWER
+  department     String
+  position       String
+  hireDate       DateTime
+  isActive       Boolean  @default(true)
+  isDeleted      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  createdBy      String
+
+  attendances     Attendance[]
+  skillMatrices   SkillMatrix[]
+  trainingRecords TrainingRecord[]
+  safetyTrainings SafetyTraining[]
+
+  @@map("employees")
+}
+
+model Attendance {
+  id            String   @id @default(uuid())
+  employeeId    String
+  date          DateTime
+  shiftId       String
+  status        String   // PRESENT | ABSENT | LATE | HALF_DAY | ON_LEAVE
+  checkInTime   DateTime?
+  checkOutTime  DateTime?
+  overtimeHours Float    @default(0)
+  isDeleted     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdBy     String
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+  shift    Shift    @relation(fields: [shiftId], references: [id])
+
+  @@map("attendances")
+}
+
+model SkillMatrix {
+  id           String    @id @default(uuid())
+  employeeId   String
+  machineName  String
+  workCenterId String
+  skillLevel   Int       // 0-4
+  certifiedDate DateTime?
+  expiryDate    DateTime?
+  isDeleted    Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  createdBy    String
+
+  employee   Employee   @relation(fields: [employeeId], references: [id])
+  workCenter WorkCenter @relation(fields: [workCenterId], references: [id])
+
+  @@map("skill_matrices")
+}
+
+model TrainingRecord {
+  id            String    @id @default(uuid())
+  employeeId    String
+  trainingName  String
+  scheduledDate DateTime
+  completedDate DateTime?
+  hoursSpent    Float
+  isEffective   Boolean?
+  notes         String?
+  isDeleted     Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  createdBy     String
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@map("training_records")
+}
+
+// ==================== MES ====================
+
+model WorkCenter {
+  id          String  @id @default(uuid())
+  name        String
+  code        String  @unique
+  description String
+  isActive    Boolean @default(true)
+  isDeleted   Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String
+
+  productionOrders ProductionOrder[]
+  productionLogs   ProductionLog[]
+  skillMatrices    SkillMatrix[]
+
+  @@map("work_centers")
+}
+
+model Shift {
+  id        String   @id @default(uuid())
+  name      String
+  type      String   // MORNING | AFTERNOON | NIGHT
+  startTime String
+  endTime   String
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String
+
+  productionOrders ProductionOrder[]
+  productionLogs   ProductionLog[]
+  attendances      Attendance[]
+
+  @@map("shifts")
+}
+
+model ProductionOrder {
+  id               String    @id @default(uuid())
+  orderNumber      String    @unique
+  productName      String
+  workCenterId     String
+  plannedQuantity  Int
+  actualQuantity   Int       @default(0)
+  defectQuantity   Int       @default(0)
+  status           String    // PLANNED | IN_PROGRESS | COMPLETED | CLOSED | CANCELLED
+  plannedStartDate DateTime
+  plannedEndDate   DateTime
+  actualStartDate  DateTime?
+  actualEndDate    DateTime?
+  shiftId          String
+  isDeleted        Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  createdBy        String
+
+  workCenter     WorkCenter      @relation(fields: [workCenterId], references: [id])
+  shift          Shift           @relation(fields: [shiftId], references: [id])
+  productionLogs ProductionLog[]
+  qualityDefects QualityDefect[]
+
+  @@map("production_orders")
+}
+
+model ProductionLog {
+  id                String   @id @default(uuid())
+  productionOrderId String
+  workCenterId      String
+  shiftId           String
+  operatorId        String
+  quantityProduced  Int
+  defectQuantity    Int      @default(0)
+  startTime         DateTime
+  endTime           DateTime
+  downtime          Float    @default(0)
+  notes             String?
+  isDeleted         Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdBy         String
+
+  productionOrder ProductionOrder @relation(fields: [productionOrderId], references: [id])
+  workCenter      WorkCenter      @relation(fields: [workCenterId], references: [id])
+  shift           Shift           @relation(fields: [shiftId], references: [id])
+
+  @@map("production_logs")
+}
+
+model QualityDefect {
+  id                String  @id @default(uuid())
+  productionOrderId String
+  defectType        String
+  quantity          Int
+  rootCauseCategory String  // Man | Machine | Material | Method
+  description       String
+  isResolved        Boolean @default(false)
+  isDeleted         Boolean @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdBy         String
+
+  productionOrder ProductionOrder @relation(fields: [productionOrderId], references: [id])
+
+  @@map("quality_defects")
+}
+
+// ==================== CMMS ====================
+
+model Asset {
+  id            String    @id @default(uuid())
+  name          String
+  code          String    @unique
+  parentAssetId String?
+  criticality   String    // A | B | C
+  location      String
+  manufacturer  String?
+  model         String?
+  serialNumber  String?
+  installDate   DateTime?
+  isActive      Boolean   @default(true)
+  isDeleted     Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  createdBy     String
+
+  parentAsset       Asset?             @relation("AssetHierarchy", fields: [parentAssetId], references: [id])
+  childAssets       Asset[]            @relation("AssetHierarchy")
+  maintenanceOrders MaintenanceOrder[]
+  pmSchedules       PMSchedule[]
+  maintenanceLogs   MaintenanceLog[]
+
+  @@map("assets")
+}
+
+model MaintenanceOrder {
+  id               String    @id @default(uuid())
+  assetId          String
+  title            String
+  description      String
+  priority         String    // CRITICAL | HIGH | MEDIUM | LOW
+  status           String    // OPEN | IN_PROGRESS | WAITING_PARTS | COMPLETED | CLOSED
+  assignedTo       String?
+  scheduledDate    DateTime
+  completedDate    DateTime?
+  estimatedDuration Float
+  actualDuration   Float?
+  cost             Float     @default(0)
+  isPreventive     Boolean   @default(false)
+  isDeleted        Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  createdBy        String
+
+  asset           Asset            @relation(fields: [assetId], references: [id])
+  maintenanceLogs MaintenanceLog[]
+
+  @@map("maintenance_orders")
+}
+
+model SparePart {
+  id           String   @id @default(uuid())
+  name         String
+  code         String   @unique
+  quantity     Int      @default(0)
+  reorderPoint Int
+  unitCost     Float
+  location     String
+  isDeleted    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  createdBy    String
+
+  @@map("spare_parts")
+}
+
+model PMSchedule {
+  id               String    @id @default(uuid())
+  assetId          String
+  name             String
+  description      String
+  intervalDays     Int?
+  meterThreshold   Float?
+  lastExecutedDate DateTime?
+  nextDueDate      DateTime
+  isActive         Boolean   @default(true)
+  isDeleted        Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  createdBy        String
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@map("pm_schedules")
+}
+
+model MaintenanceLog {
+  id                 String    @id @default(uuid())
+  maintenanceOrderId String
+  assetId            String
+  failureStartTime   DateTime
+  failureEndTime     DateTime?
+  repairStartTime    DateTime?
+  repairEndTime      DateTime?
+  rootCauseCategory  String?
+  description        String
+  isDeleted          Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  createdBy          String
+
+  maintenanceOrder MaintenanceOrder @relation(fields: [maintenanceOrderId], references: [id])
+  asset            Asset            @relation(fields: [assetId], references: [id])
+
+  @@map("maintenance_logs")
+}
+
+// ==================== HSE ====================
+
+model Incident {
+  id                String   @id @default(uuid())
+  title             String
+  type              String   // INJURY | NEAR_MISS | PROPERTY_DAMAGE | ENVIRONMENTAL | FIRE | OTHER
+  severity          String   // MINOR | MODERATE | MAJOR | CRITICAL | FATAL
+  description       String
+  location          String
+  occurredAt        DateTime
+  reportedBy        String
+  rootCauseCategory String?
+  isLostTime        Boolean  @default(false)
+  lostTimeDays      Float    @default(0)
+  photoUrls         String[] @default([])
+  isDeleted         Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdBy         String
+
+  @@map("incidents")
+}
+
+model RiskAssessment {
+  id                  String   @id @default(uuid())
+  title               String
+  area                String
+  hazardDescription   String
+  likelihood          Int
+  severity            Int
+  riskScore           Int
+  controlMeasures     String
+  residualLikelihood  Int?
+  residualSeverity    Int?
+  residualRiskScore   Int?
+  assessedBy          String
+  isDeleted           Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  createdBy           String
+
+  @@map("risk_assessments")
+}
+
+model CAPA {
+  id                String    @id @default(uuid())
+  title             String
+  description       String
+  sourceType        String    // INCIDENT | NCR | AUDIT | COMPLAINT
+  sourceId          String
+  status            String    // OPEN | IN_PROGRESS | VERIFICATION | CLOSED | OVERDUE
+  assignedTo        String
+  rootCauseCategory String
+  plannedDate       DateTime
+  actualClosureDate DateTime?
+  isDeleted         Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  createdBy         String
+
+  @@map("capas")
+}
+
+model HazardousItem {
+  id        String   @id @default(uuid())
+  name      String
+  unNumber  String?
+  sdsUrl    String?
+  location  String
+  quantity  Float
+  unit      String
+  riskLevel String   // LOW | MEDIUM | HIGH
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String
+
+  @@map("hazardous_items")
+}
+
+model PTW {
+  id                 String    @id @default(uuid())
+  title              String
+  workType           String
+  location           String
+  status             String    // DRAFT | PENDING_APPROVAL | APPROVED | ACTIVE | CLOSED | REJECTED
+  requestedBy        String
+  approvedBy         String?
+  validFrom          DateTime
+  validTo            DateTime
+  maintenanceOrderId String?
+  isDeleted          Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  createdBy          String
+
+  @@map("ptws")
+}
+
+model SafetyTraining {
+  id                String    @id @default(uuid())
+  employeeId        String
+  trainingName      String
+  certificationName String?
+  completedDate     DateTime
+  expiryDate        DateTime?
+  isValid           Boolean   @default(true)
+  isDeleted         Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  createdBy         String
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@map("safety_trainings")
+}
+
+// ==================== ISO ====================
+
+model Document {
+  id              String   @id @default(uuid())
+  title           String
+  documentNumber  String   @unique
+  category        String
+  status          String   // DRAFT | PENDING_REVIEW | PENDING_APPROVAL | ACTIVE | OBSOLETE
+  currentRevision Int      @default(1)
+  approverIds     String[] @default([])
+  approvalCount   Int      @default(0)
+  isDeleted       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  createdBy       String
+
+  revisions DocumentRevision[]
+
+  @@map("documents")
+}
+
+model DocumentRevision {
+  id                String    @id @default(uuid())
+  documentId        String
+  revisionNumber    Int
+  changeDescription String
+  approvedBy        String[]  @default([])
+  approvedAt        DateTime?
+  fileUrl           String
+  isDeleted         Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  createdBy         String
+
+  document Document @relation(fields: [documentId], references: [id])
+
+  @@map("document_revisions")
+}
+
+model Audit {
+  id            String    @id @default(uuid())
+  title         String
+  auditType     String    // INTERNAL | EXTERNAL | SURVEILLANCE
+  scheduledDate DateTime
+  completedDate DateTime?
+  auditorName   String
+  findings      Int       @default(0)
+  closedFindings Int      @default(0)
+  status        String    // PLANNED | IN_PROGRESS | COMPLETED
+  isDeleted     Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  createdBy     String
+
+  @@map("audits")
+}
+
+model NCR {
+  id                String    @id @default(uuid())
+  title             String
+  description       String
+  status            String    // OPEN | INVESTIGATION | CORRECTIVE_ACTION | VERIFICATION | CLOSED
+  sourceType        String    // PRODUCTION | AUDIT | CUSTOMER_COMPLAINT | INSPECTION
+  sourceId          String?
+  rootCauseCategory String
+  assignedTo        String
+  resolvedDate      DateTime?
+  isDeleted         Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  createdBy         String
+
+  @@map("ncrs")
+}
+
+model CustomerComplaint {
+  id                String    @id @default(uuid())
+  customerName      String
+  productName       String
+  description       String
+  receivedDate      DateTime
+  resolvedDate      DateTime?
+  rootCauseCategory String?
+  capaId            String?
+  isResolved        Boolean   @default(false)
+  isDeleted         Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  createdBy         String
+
+  @@map("customer_complaints")
+}
+
+model CalibrationRecord {
+  id                  String   @id @default(uuid())
+  instrumentName      String
+  instrumentCode      String
+  calibratedDate      DateTime
+  nextCalibrationDate DateTime
+  calibratedBy        String
+  result              String   // PASS | FAIL | ADJUSTED
+  certificateUrl      String?
+  isDeleted           Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  createdBy           String
+
+  @@map("calibration_records")
+}
